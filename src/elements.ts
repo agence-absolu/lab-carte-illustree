@@ -54,14 +54,20 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
 
   const ids: string[] = [];
 
+  // Métadonnées et données revalidées à chaque visite (ETag : 304 sans renvoi si inchangées) : elles
+  // changent à chaque export, et un cache de 24 h servait par exemple un sprites.json sans la caipirinha
+  const getJson = (url: string) => fetch(url, { cache: 'no-cache' }).then((r) => r.json());
+
   async function load() {
-    const index: { id: string; bounds: [number, number, number, number] }[] =
-      await fetch(`${base}/elements/index.json`).then((r) => r.json());
-    const sections: Elements[] = await Promise.all(index.map((e) => fetch(`${base}/elements/${e.id}.json`).then((r) => r.json())));
-    const sprites: Record<string, { side: number; footY: number }> = await fetch(`${base}/elements/sprites/sprites.json`).then((r) => r.json());
+    // v : jetons de version (export, rendu) ajoutés aux URL des images, que MapLibre charge sans
+    // revalidation : une image refaite change d'URL et n'est pas resservie depuis le cache
+    const index: { id: string; bounds: [number, number, number, number]; v?: string }[] =
+      await getJson(`${base}/elements/index.json`);
+    const sections: Elements[] = await Promise.all(index.map((e) => getJson(`${base}/elements/${e.id}.json`)));
+    const sprites: Record<string, { side: number; footY: number; v?: number }> = await getJson(`${base}/elements/sprites/sprites.json`);
     await Promise.all(
-      Object.keys(sprites).map(async (name) => {
-        const img = await map.loadImage(`${base}/elements/sprites/${name}.png`);
+      Object.entries(sprites).map(async ([name, sp]) => {
+        const img = await map.loadImage(`${base}/elements/sprites/${name}.png?v=${sp.v ?? 0}`);
         // Toutes les images à SPRITE_CSS_PX de côté, quelle que soit leur définition (256 ou 512 px)
         if (!map.hasImage(name)) map.addImage(name, img.data, { pixelRatio: img.data.width / SPRITE_CSS_PX });
       }),
@@ -97,7 +103,7 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
       const id = `sol-${e.id}`;
       map.addSource(id, {
         type: 'raster',
-        tiles: [`${base}/sol/{z}/{x}/{y}.webp`],
+        tiles: [`${base}/sol/{z}/{x}/{y}.webp?v=${e.v ?? 0}`],
         tileSize: 256,
         bounds: e.bounds.map((v, i) => v + (i < 2 ? 1e-7 : -1e-7)) as [number, number, number, number],
         minzoom: 10,

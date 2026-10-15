@@ -395,6 +395,11 @@ node scripts/export-elements.ts --region martinique --section 15_9  # → elemen
   vus de dessus sembleraient couchés : tuiles peintes).
 - Clins d'œil : `EXTRAS` dans `src/elements.ts` (caipirinha géante chez Fred, `blender/caipirinha.py`,
   contour cartoon par Freestyle ; un jeu de lignes créé par script n'a pas de `linestyle`).
+- **Cache** (R2 sert `max-age=86400`) : les JSON des éléments sont lus en `cache: 'no-cache'`
+  (revalidation ETag, mise à jour immédiate) et envoyés sur R2 avec `max-age=300` ; les images
+  (sprites, sol) portent un jeton `?v=` lu dans ces JSON (`v` de `sprites.json`, posé au rendu par
+  les scripts Blender ; `v` de `index.json`, posé à l'export). Un sprite refait doit donc être rendu
+  par son script (pas copié à la main), sinon son jeton ne change pas.
 - Relief 3D (vue inclinée) : tuiles Terrarium d'AWS (~30 m), à remplacer par le RGE ALTI.
 - Limites : les arbres passent devant les bâtiments quelle que soit la profondeur (les symboles ne
   testent pas la profondeur), billboards identiques sous tous les angles, raccord visible en bord de

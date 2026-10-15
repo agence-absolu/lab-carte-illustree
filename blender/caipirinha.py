@@ -11,6 +11,7 @@ import json
 import math
 import os
 import sys
+import time
 
 import bpy
 import bmesh
@@ -191,7 +192,7 @@ index_file = os.path.join(ARGS.out, 'sprites.json')
 with open(index_file) as f:
     index = json.load(f)
 # side : côté de l'image en hauteurs de verre ; footY : pied du verre (z = 0) depuis le haut
-index['caipirinha'] = {'model': -1, 'side': side, 'footY': 0.5 + cy / side}
+index['caipirinha'] = {'model': -1, 'side': side, 'footY': 0.5 + cy / side, 'v': int(time.time())}
 with open(index_file, 'w') as f:
     json.dump(index, f, indent=1)
 print(f'[caipirinha] {r.filepath} (côté {side:.2f}, pied à {0.5 + cy / side:.2f})', flush=True)

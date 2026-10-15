@@ -1175,9 +1175,14 @@ def render_sprites(out_dir):
             name = f'{model.name}_{v}'
             SCENE.render.filepath = os.path.join(out_dir, f'{name}.png')
             bpy.ops.render.render(write_still=True)
-            index[name] = {'model': i, 'side': side, 'footY': 0.5 + cy / side}
+            # v : jeton de version (la visionneuse l'ajoute à l'URL de l'image, contre le cache)
+            index[name] = {'model': i, 'side': side, 'footY': 0.5 + cy / side, 'v': int(time.time())}
             bpy.data.objects.remove(obj)
-    with open(os.path.join(out_dir, 'sprites.json'), 'w') as f:
+    index_file = os.path.join(out_dir, 'sprites.json')
+    if os.path.exists(index_file):  # garder les sprites des autres scripts (caipirinha.py…)
+        with open(index_file) as f:
+            index = {**{k: v for k, v in json.load(f).items() if v.get('model', -1) < 0}, **index}
+    with open(index_file, 'w') as f:
         json.dump(index, f, indent=1)
     log(f'{len(index)} sprites → {out_dir}')
 

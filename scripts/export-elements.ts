@@ -140,12 +140,13 @@ await writeFile(
 );
 // Index des sections exportées, lu par la visionneuse
 const indexFile = join(out, 'index.json');
-let index: { id: string; bounds: number[] }[] = [];
+// v : jeton de version de la section (export), ajouté par la visionneuse à l'URL des tuiles du sol
+let index: { id: string; bounds: number[]; v: string }[] = [];
 try {
   index = JSON.parse(await readFile(indexFile, 'utf8'));
 } catch {
   // premier export
 }
-index = [...index.filter((e) => e.id !== PATHS.section), { id: PATHS.section, bounds: region.lonLatBounds }];
+index = [...index.filter((e) => e.id !== PATHS.section), { id: PATHS.section, bounds: region.lonLatBounds, v: Date.now().toString(36) }];
 await writeFile(indexFile, JSON.stringify(index.sort((a, b) => a.id.localeCompare(b.id)), null, 1));
 console.log(`${PATHS.section} : ${treeFeatures.length} arbres (${thinned} retirés en zone dense), ${buildingFeatures.length} bâtiments → ${out}`);
