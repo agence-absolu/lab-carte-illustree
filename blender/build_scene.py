@@ -46,6 +46,12 @@ def parse_args():
     p.add_argument('--save-blend', action='store_true')
     p.add_argument('--no-render', action='store_true')
     p.add_argument('--seed', type=int, default=1)
+    # Essai « éléments repositionnés » : sol seul (arbres et bâtiments affichés à part par la
+    # visionneuse) et images des modèles d'arbres vus de biais
+    p.add_argument('--no-trees', action='store_true', help='sans les arbres')
+    p.add_argument('--no-buildings', action='store_true', help='sans les bâtiments')
+    p.add_argument('--sprites', metavar='DOSSIER', help='rend chaque modèle d\'arbre de biais (PNG transparents) au lieu des blocs')
+    p.add_argument('--sprite-elevation', type=float, default=30.0, help='hauteur de la caméra des sprites au-dessus de l\'horizon (°)')
     return p.parse_args(argv)
 
 
@@ -1117,11 +1123,75 @@ def render_chunks(cam):
         log(f'bloc {cx},{cy} ({px} px, ×{RENDER_SCALE}) rendu en {time.time() - t:.1f} s → {SCENE.render.filepath}')
 
 
+SPRITE_PX = 256
+SPRITE_VARIANTS = 3  # rotations différentes par modèle
+
+
+def render_sprites(out_dir):
+    """Rend chaque modèle d'arbre seul, vu de biais, sur fond transparent.
+
+    La visionneuse les affiche debout (icônes face à la caméra) sur le sol rendu sans
+    arbres. Proportions houppier / hauteur : médiane des arbres de la région, par modèle.
+    Écrit sprites.json : pour chaque image, côté du carré en hauteurs d'arbre (L) et
+    position verticale du pied dans l'image (fraction depuis le haut).
+    """
+    coll, models = tree_models()
+    hs = np.array([t['h'] for t in TREES])
+    rs = np.array([t['r'] for t in TREES])
+    kinds = tree_kinds(np.array([t['x'] for t in TREES]), np.array([t['y'] for t in TREES]), hs)
+    e = math.radians(ARGS.sprite_elevation)
+    # Caméra regardant vers le nord, inclinée : axes de l'écran (droite, haut)
+    right = np.array([1.0, 0.0, 0.0])
+    up = np.array([0.0, math.sin(e), math.cos(e)])
+    setup_lighting()
+    setup_render()
+    SCENE.render.film_transparent = True
+    SCENE.render.image_settings.color_mode = 'RGBA'
+    SCENE.render.resolution_x = SCENE.render.resolution_y = SPRITE_PX
+    cam_data = bpy.data.cameras.new('camera_sprite')
+    cam_data.type = 'ORTHO'
+    cam = link(bpy.data.objects.new('camera_sprite', cam_data))
+    cam.rotation_euler = (math.pi / 2 - e, 0.0, 0.0)
+    SCENE.camera = cam
+    os.makedirs(out_dir, exist_ok=True)
+    index = {}
+    for i, model in enumerate(models):
+        sel = kinds == i
+        ratio = float(np.median(rs[sel] / hs[sel])) if sel.any() else 0.4
+        for v in range(SPRITE_VARIANTS):
+            obj = link(bpy.data.objects.new(f'sprite_{i}_{v}', model.data))
+            obj.scale = (ratio, ratio, 1.0)
+            obj.rotation_euler = (0.0, 0.0, 2 * math.pi * (v / SPRITE_VARIANTS + 0.13 * i))
+            bpy.context.view_layer.update()
+            pts = np.array([obj.matrix_world @ vert.co for vert in model.data.vertices])
+            sx, sy = pts @ right, pts @ up
+            side = 1.06 * max(sx.max() - sx.min(), sy.max() - sy.min())
+            cx, cy = (sx.max() + sx.min()) / 2, (sy.max() + sy.min()) / 2
+            # Centre de l'image sur le centre de la silhouette ; caméra reculée le long de la visée
+            center = cx * right + cy * up
+            view = np.array([0.0, math.cos(e), -math.sin(e)])
+            cam.location = tuple(center - 10 * view)
+            cam_data.ortho_scale = side
+            name = f'{model.name}_{v}'
+            SCENE.render.filepath = os.path.join(out_dir, f'{name}.png')
+            bpy.ops.render.render(write_still=True)
+            index[name] = {'model': i, 'side': side, 'footY': 0.5 + cy / side}
+            bpy.data.objects.remove(obj)
+    with open(os.path.join(out_dir, 'sprites.json'), 'w') as f:
+        json.dump(index, f, indent=1)
+    log(f'{len(index)} sprites → {out_dir}')
+
+
 def main():
     t = time.time()
+    if ARGS.sprites:
+        render_sprites(ARGS.sprites)
+        return
     build_terrain()
-    build_trees()
-    build_buildings()
+    if not ARGS.no_trees:
+        build_trees()
+    if not ARGS.no_buildings:
+        build_buildings()
     build_roads()
     build_water()
     setup_lighting()

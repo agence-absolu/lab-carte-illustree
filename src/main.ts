@@ -2,6 +2,7 @@ import * as maplibregl from 'maplibre-gl';
 import type { ExpressionSpecification, FilterSpecification, LayerSpecification, RasterTileSource, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { setupPois } from './poi.ts';
+import { setupElements } from './elements.ts';
 // MapLibre 6 charge son worker via import.meta.url, ce que le pré-bundling de Vite
 // casse : on lui donne l'URL du worker servie par Vite.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -287,6 +288,22 @@ function applyTilt() {
   }
 }
 tilt.addEventListener('change', applyTilt);
+
+// Éléments repositionnés (essai, Saint-Pierre) : sol sans arbres, arbres en sprites, bâtiments extrudés
+const elementsInput = $<HTMLInputElement>('elements');
+elementsInput.closest('label')!.hidden = meta.name !== 'martinique';
+let showElements: ((on: boolean) => void) | null = null;
+elementsInput.addEventListener('change', async () => {
+  showElements ??= await setupElements(map, TILES, hasLabels ? labelLayers[0].id : undefined);
+  showElements(elementsInput.checked);
+  if (!elementsInput.checked) return;
+  if (!tilt.checked) {
+    tilt.checked = true;
+    applyTilt();
+    map.stop();
+  }
+  map.flyTo({ center: [-61.1775, 14.7425], zoom: 16.2, pitch: 62, bearing: 70, duration: 3500, essential: true });
+});
 
 // Superposition de l'ortho IGN pour comparaison
 const ortho = $<HTMLInputElement>('ortho');

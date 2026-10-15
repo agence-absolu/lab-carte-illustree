@@ -361,3 +361,28 @@ npm run dev                            # visionneuse
 - Stylisation plus « illustration » (teintes plus franches, contours, AO plus marquée),
   comparaison côte à côte avec Grincat.
 - Région plus grande pour tester le rendu multi-blocs et les raccords de marge.
+
+### Essai « éléments repositionnés » (branche `essai/elements-3d`, 15/10/2026)
+
+En vue inclinée, les arbres et bâtiments peints dans les tuiles restent plats. L'essai les fait
+placer par la visionneuse sur un sol rendu sans eux, sur la section `15_9` (Saint-Pierre) :
+
+```
+node scripts/run-tiled.ts --region martinique --only 15_9 --keep --no-pyramid   # garde data/…/sections/15_9
+node scripts/render.ts --region martinique --section 15_9 sol -- --no-trees --no-buildings
+blender -b -P blender/build_scene.py -- --season jour --data data/martinique/sections/15_9 \
+  --sprites public/tiles/martinique/elements/sprites                               # 18 sprites 256 px
+node scripts/make-tiles.ts --region martinique --section 15_9 sol   # ⚠ réécrit region.json et regions.json
+node scripts/export-elements.ts --region martinique --section 15_9  # → elements/15_9.json (5,4 Mo)
+```
+
+- `make-tiles` sans `--cut-only` réécrit `public/tiles/martinique/region.json` et `regions.json` avec
+  les métadonnées de la section : les sauvegarder avant et les restaurer après.
+- Visionneuse (`src/elements.ts`) : sprites en symboles debout (`icon-pitch-alignment: viewport`),
+  taille = hauteur réelle (expression exponentielle base 2 sur le zoom), pied calé par `icon-offset`
+  par arbre ; ombres = disques flous décalés vers le SE ; bâtiments = deux `fill-extrusion` (murs
+  crème + dalle de toit de 0,6 m à la couleur moyenne de l'ortho). À partir du zoom carte 14.
+- Relief 3D (vue inclinée) : tuiles Terrarium d'AWS (~30 m), à remplacer par le RGE ALTI.
+- Limites : les arbres passent devant les bâtiments quelle que soit la profondeur (les symboles ne
+  testent pas la profondeur), billboards identiques sous tous les angles, raccord visible en bord de
+  section avec les arbres peints.
