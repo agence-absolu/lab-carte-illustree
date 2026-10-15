@@ -16,4 +16,14 @@ export default defineConfig(({ command }) => ({
   // celles de R2 (VITE_TILES_URL), le build ne les embarque pas. Le serveur de
   // développement les sert pour la bascule vers les tuiles locales.
   publicDir: command === 'build' ? false : 'public',
+  build: {
+    rolldownOptions: {
+      output: {
+        // Worker MapLibre (maplibre-gl-worker.mjs?url) émis en .js : le serveur du lab ne
+        // connaît pas .mjs et l'envoie en application/octet-stream, refusé pour un module.
+        assetFileNames: ({ names }) =>
+          names.some((n) => n.endsWith('.mjs')) ? 'assets/[name]-[hash].js' : 'assets/[name]-[hash][extname]',
+      },
+    },
+  },
 }));
