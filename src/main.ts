@@ -35,6 +35,24 @@ const regions: { name: string; description: string }[] = await fetch(`${TILES}/r
 const regionName = params.get('region') ?? regions[0]?.name;
 const meta: TilesMeta = await fetch(`${TILES}/${regionName}/region.json`).then((r) => r.json());
 document.title = `Carte illustrée — ${meta.description ?? meta.name}`;
+// Notice de fabrication : elle décrit le pipeline de la Martinique
+const about = $<HTMLDialogElement>('about');
+const aboutOpen = $<HTMLButtonElement>('about-open');
+aboutOpen.hidden = meta.name !== 'martinique';
+aboutOpen.addEventListener('click', () => about.showModal());
+$('about-close').addEventListener('click', () => about.close());
+// Clic sur le fond assombri (hors de la boîte) : fermeture
+about.addEventListener('click', (e) => {
+  if (e.target === about) about.close();
+});
+// Une seule étape ouverte à la fois : l'attribut name des <details> le fait déjà dans les
+// navigateurs récents, ceci couvre les autres
+const steps = document.querySelectorAll<HTMLDetailsElement>('#about details[name="about-step"]');
+for (const d of steps) {
+  d.addEventListener('toggle', () => {
+    if (d.open) for (const o of steps) if (o !== d) o.open = false;
+  });
+}
 
 const regionSelect = $<HTMLSelectElement>('region');
 for (const r of regions) regionSelect.add(new Option(r.description, r.name, false, r.name === regionName));
@@ -191,8 +209,8 @@ const style: StyleSpecification = {
       // Au-delà du zoom max, MapLibre agrandit les tuiles du zoom max
       paint: { 'raster-resampling': 'linear' as const },
     })),
-    { id: 'ortho', type: 'raster', source: 'ortho', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.5 } },
-    { id: 'osm', type: 'raster', source: 'osm', layout: { visibility: 'none' }, paint: { 'raster-opacity': 0.5 } },
+    { id: 'ortho', type: 'raster', source: 'ortho', layout: { visibility: 'none' } },
+    { id: 'osm', type: 'raster', source: 'osm', layout: { visibility: 'none' } },
     ...(hasLabels ? labelLayers : []),
   ],
 };
@@ -210,11 +228,17 @@ const map = new maplibregl.Map({
     [meta.bounds[0] - 0.02, meta.bounds[1] - 0.015],
     [meta.bounds[2] + 0.02, meta.bounds[3] + 0.015],
   ],
+  // Vue fixe, nord en haut et à plat : ni rotation ni inclinaison
+  dragRotate: false,
+  pitchWithRotate: false,
+  touchPitch: false,
+  maxPitch: 0,
   attributionControl: { compact: true, customAttribution: 'Données IGN (licence Etalab 2.0)' },
 });
-map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'top-right');
+map.touchZoomRotate.disableRotation();
+map.keyboard.disableRotation();
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
-map.dragRotate.enable();
 
 // Accès depuis la console pour le débogage
 if (import.meta.env.DEV) Object.assign(window, { map });
@@ -226,28 +250,13 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sea
   });
 }
 
-// Rotation de la vue
-const bearing = $<HTMLInputElement>('bearing');
-const bearingValue = $<HTMLOutputElement>('bearing-value');
-bearing.addEventListener('input', () => map.setBearing(Number(bearing.value)));
-$('grincat').addEventListener('click', () => map.easeTo({ bearing: -125 }));
-map.on('rotate', () => {
-  const b = Math.round(map.getBearing());
-  bearing.value = String(b);
-  bearingValue.textContent = `${b}°`;
-});
-
 // Superposition de l'ortho IGN pour comparaison
 const ortho = $<HTMLInputElement>('ortho');
-const orthoOpacity = $<HTMLInputElement>('ortho-opacity');
 ortho.addEventListener('change', () => map.setLayoutProperty('ortho', 'visibility', ortho.checked ? 'visible' : 'none'));
-orthoOpacity.addEventListener('input', () => map.setPaintProperty('ortho', 'raster-opacity', Number(orthoOpacity.value)));
 
 // Superposition OSM pour comparaison
 const osm = $<HTMLInputElement>('osm');
-const osmOpacity = $<HTMLInputElement>('osm-opacity');
 osm.addEventListener('change', () => map.setLayoutProperty('osm', 'visibility', osm.checked ? 'visible' : 'none'));
-osmOpacity.addEventListener('input', () => map.setPaintProperty('osm', 'raster-opacity', Number(osmOpacity.value)));
 
 // Bascule HD / standard (tileSize reste 256 : MapLibre affiche les 512 px en 256 px CSS)
 const hdInput = $<HTMLInputElement>('hd');

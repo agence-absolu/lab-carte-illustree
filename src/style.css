@@ -49,3 +49,118 @@ body {
 #panel [hidden] {
   display: none;
 }
+
+/* Notice « Comment cette carte est fabriquée » (Martinique) : bouton + modale */
+#about-open {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 600;
+  background: rgb(255 255 255 / 0.96);
+  border: 0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 0.2);
+  cursor: pointer;
+}
+
+#about-open[hidden] {
+  display: none;
+}
+
+#about {
+  width: min(640px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgb(0 0 0 / 0.35);
+}
+
+/* Colonne : en-tête fixe, corps qui défile */
+#about[open] {
+  display: flex;
+  flex-direction: column;
+}
+
+#about::backdrop {
+  background: rgb(0 0 0 / 0.45);
+}
+
+#about header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e3e3e3;
+}
+
+#about h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+#about-close {
+  width: 32px;
+  height: 32px;
+  font-size: 22px;
+  line-height: 1;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+#about-close:hover {
+  background: #eee;
+}
+
+#about summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+#about .about-body {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 4px 16px 16px;
+}
+
+#about .about-body > details {
+  border-top: 1px solid #e3e3e3;
+  padding: 6px 0;
+}
+
+#about .about-body > details > summary {
+  font-weight: 500;
+}
+
+#about p,
+#about ul,
+#about dl {
+  margin: 6px 0;
+}
+
+#about ul {
+  padding-left: 18px;
+}
+
+#about li + li {
+  margin-top: 4px;
+}
+
+#about dt {
+  margin-top: 8px;
+  font-weight: 600;
+}
+
+#about dd {
+  margin: 2px 0 0;
+}
+
+#about code {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}

@@ -16,21 +16,201 @@
       <fieldset id="seasons">
         <legend>Saison</legend>
       </fieldset>
-      <label for="bearing">Rotation : <output id="bearing-value">0°</output></label>
-      <input id="bearing" type="range" min="-180" max="180" step="5" value="0" />
-      <button id="grincat" type="button">Vue à la Grincat (−125°)</button>
       <label><input id="labels" type="checkbox" checked /> Libellés (communes, lieux, rues)</label>
       <label><input id="hd" type="checkbox" /> Tuiles HD (@2x)</label>
       <label><input id="grid" type="checkbox" /> Bords des tuiles chargées</label>
       <label><input id="grid-ids" type="checkbox" /> Coordonnées des tuiles (z/x/y)</label>
       <label><input id="ortho" type="checkbox" /> Superposer l'ortho IGN</label>
-      <label for="ortho-opacity">Opacité ortho</label>
-      <input id="ortho-opacity" type="range" min="0" max="1" step="0.05" value="0.5" />
       <label><input id="osm" type="checkbox" /> Superposer OSM</label>
-      <label for="osm-opacity">Opacité OSM</label>
-      <input id="osm-opacity" type="range" min="0" max="1" step="0.05" value="0.5" />
       <p id="zoom"></p>
     </form>
+    <button id="about-open" type="button" aria-haspopup="dialog" hidden>Comment cette carte est fabriquée</button>
+    <dialog id="about" aria-labelledby="about-title">
+      <header>
+        <h2 id="about-title">Comment cette carte est fabriquée</h2>
+        <button id="about-close" type="button" aria-label="Fermer">×</button>
+      </header>
+      <div class="about-body">
+        <p>
+          Cette carte n'est pas une photo retouchée : c'est une <strong>illustration
+          3D</strong> de la Martinique entière, modélisée et rendue dans
+          <strong>Blender</strong> à partir de données publiques, vue de dessus, puis
+          découpée en ~100 000 tuiles d'image (zooms 10 à 18). Tout est produit par
+          des scripts, sans retouche à la main.
+        </p>
+
+        <details name="about-step">
+          <summary>1. La grille : de l'île aux blocs</summary>
+          <ul>
+            <li>Emprise : 61,245° O – 60,8° O, 14,38° N – 14,885° N, en projection
+              <em>Web Mercator</em> (EPSG:3857), celle des cartes web.</li>
+            <li>Tuiles de 256 px au standard XYZ ; au zoom 18, un pixel vaut
+              0,6 m Mercator (≈ 0,58 m au sol à cette latitude).</li>
+            <li>Rendu par <strong>blocs de 8 × 8 tuiles</strong> (2 048 px, ≈ 1,2 km),
+              regroupés en <strong>sections de 2 × 2 blocs</strong> : ni les données ni
+              la scène 3D de l'île ne tiennent en un seul morceau.</li>
+            <li>Un relief grossier (pixels de 25 m) désigne les blocs utiles : la terre,
+              les hauts-fonds et une couronne de mer d'un bloc autour des côtes, soit
+              <strong>1 211 blocs en 334 sections</strong>. Le large n'est pas rendu :
+              c'est la couleur de fond de la carte.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>2. Les données et leurs sources</summary>
+          <p>Tout vient de services ouverts, interrogés directement en Web Mercator,
+            par requêtes de 2 048 px au plus :</p>
+          <dl>
+            <dt>Relief et bathymétrie — IGN, RGE ALTI</dt>
+            <dd>Service WMS de la Géoplateforme (<code>data.geopf.fr</code>), couche
+              <code>ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES</code>, altitudes en float 32
+              bits. La Martinique n'a pas de LiDAR HD : la grille native est de 5 m, lissée
+              pour effacer les marches. Le RGE ALTI inclut la bathymétrie côtière
+              (Litto3D, jusqu'à −50 m environ).</dd>
+            <dt>Orthophotographie — IGN, BD ORTHO 20 cm</dt>
+            <dd>Couche WMS <code>ORTHOIMAGERY.ORTHOPHOTOS</code>, téléchargée à
+              ≈ 0,3 m par pixel : elle guide les couleurs du sol et la végétation, et une
+              version à 1 m débarrassée des bateaux donne les motifs des fonds marins
+              (récifs, herbiers, sable).</dd>
+            <dt>Vecteurs — IGN, BD TOPO V3</dt>
+            <dd>Service WFS, en GeoJSON : bâtiments (emprise, hauteur, altitude du toit),
+              tronçons de route (nature, largeur), zones de végétation (forêt, mangrove…),
+              cours d'eau et plans d'eau, estran (plages de sable), terrains de sport,
+              cimetières.</dd>
+            <dt>Cultures — IGN / ASP, Registre parcellaire graphique</dt>
+            <dd>Couche WFS <code>RPG.LATEST:parcelles_graphiques</code> : type de culture
+              de chaque parcelle déclarée (bananeraies, canne à sucre, vergers, prairies,
+              maraîchage…).</dd>
+            <dt>Occupation du sol — ESA WorldCover 2021</dt>
+            <dd>Carte mondiale à 10 m de l'Agence spatiale européenne (tuiles GeoTIFF
+              sur AWS S3) : distingue forêts, arbustes, prairies, cultures, sols nus et
+              eau, là où l'orthophoto seule confond forêt et prairie.</dd>
+            <dt>Libellés — OpenStreetMap</dt>
+            <dd>API Overpass : communes, lieux-dits et rues nommées.</dd>
+          </dl>
+          <p>Toutes les coordonnées sont ramenées en mètres Mercator locaux. Comme
+            Mercator dilate les distances horizontales de 1/cos(latitude), altitudes et
+            hauteurs sont multipliées par ce même facteur (≈ 1,03 ici) pour garder les
+            proportions et des ombres justes.</p>
+        </details>
+
+        <details name="about-step">
+          <summary>3. Le relief et la mer</summary>
+          <ul>
+            <li>Au large, le levé n'a plus de mesures (valeurs aberrantes) : les trous sont
+              comblés <strong>une fois pour toute l'île</strong> en prolongeant les fonds
+              voisins, avec une plongée progressive jusqu'à −60 m sur 800 m, puis lissés
+              et fondus sur 60 m avec les fonds mesurés. Comblés section par section,
+              chaque morceau aurait inventé sa propre mer.</li>
+            <li>Le levé bathymétrique a enregistré les <strong>bateaux au mouillage</strong>
+              comme des hauts-fonds : ils sont effacés par une ouverture morphologique
+              (filtre minimum puis maximum).</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>4. La végétation : 1 arbre = 1 objet 3D</summary>
+          <p>Sans LiDAR de hauteur de végétation, les arbres sont
+            <strong>plantés par programme</strong> :</p>
+          <ul>
+            <li>Un candidat tous les ~4,5 m (grille légèrement aléatoire), gardé selon un
+              score : verdeur et ton sombre de l'orthophoto (vert moins rouge, car la brume
+              tropicale bleuit la forêt), part d'arbres WorldCover, zones boisées
+              BD TOPO.</li>
+            <li>Jamais d'arbres sur les bâtiments, routes, stades, cimetières et plans
+              d'eau ; seulement des arbres isolés dans les champs et prairies du RPG ; les
+              ombres profondes des ravines restent boisées.</li>
+            <li>Espèces selon le lieu : cocotiers près des plages et dans les bourgs,
+              palétuviers dans la mangrove, deux silhouettes de feuillus ailleurs, petits
+              fruitiers dans les vergers.</li>
+            <li><strong>Bananeraies</strong> : bananiers en rangs de 3,5 × 2,4 m, orientés
+              d'après les rayures visibles sur l'orthophoto (tenseur de structure) et calés
+              sur un bord de la parcelle. La canne à sucre est un couvert dense au sol.</li>
+            <li>La plantation suit les coordonnées absolues : deux sections voisines
+              plantent exactement les mêmes arbres dans leur recouvrement, sans raccord
+              visible.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>5. La modélisation dans Blender</summary>
+          <p>Un script Python (<code>bpy</code>) construit la scène de chaque section dans
+            Blender 5.2, sans interface :</p>
+          <ul>
+            <li><strong>Terrain</strong> : maillage tiré du relief (un sommet tous les
+              ~2 m), sous la terre comme sous la mer.</li>
+            <li><strong>Sol</strong> : matériau procédural. L'orthophoto floutée ne donne
+              que les grandes teintes (≈ 30 %) ; le détail est généré (touffes, grain,
+              micro-relief). Des masques ajoutent plages, champs de canne, galets des
+              rivières et roche sur les à-pics.</li>
+            <li><strong>Mer</strong> : couleur selon la profondeur, motifs du fond repris
+              de l'orthophoto, écume au rivage ; au-delà de 25 à 55 m de fond, un bleu uni
+              (#0b3f78) identique au fond de la carte.</li>
+            <li><strong>Arbres</strong> : modèles low-poly (feuillus, cocotier, palétuvier,
+              bananier, fruitier) instanciés par <em>Geometry Nodes</em> sur les points de
+              plantation, à leur hauteur, avec une rotation aléatoire.</li>
+            <li><strong>Bâtiments</strong> : emprises BD TOPO extrudées jusqu'à l'altitude
+              du toit, toits plats aux couleurs des tôles.</li>
+            <li><strong>Routes et cours d'eau</strong> : rubans drapés sur le relief,
+              largeur selon la nature (9 m pour une route à 2 chaussées, 5 m à
+              1 chaussée, 2,5 m un chemin, 1,2 m un sentier) ; tunnels et liaisons
+              maritimes ignorés. Bassins et étangs en plans d'eau plats.</li>
+            <li><strong>Lumière</strong> : un soleil unique venant du nord-ouest (convention
+              cartographique), 45° au-dessus de l'horizon, plus la lumière du ciel : les
+              ombres portées sont les mêmes partout.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>6. Le rendu des images</summary>
+          <ul>
+            <li>Moteur <strong>Eevee</strong> : 32 échantillons, ombres, lancer de rayons
+              et illumination globale rapide (occlusion ambiante), transformée de couleurs
+              Standard, filtre de reconstruction réduit à 1 px pour la netteté.</li>
+            <li><strong>Caméra orthographique verticale</strong>, nord en haut : aucune
+              perspective, chaque pixel tombe exactement sur la grille des tuiles.</li>
+            <li>Chaque bloc est rendu avec une <strong>marge de 64 px</strong> (image de
+              2 176 px, ≈ 1,3 km) recadrée ensuite : les ombres des arbres et bâtiments
+              voisins ne sont pas coupées aux bords.</li>
+            <li>Une section à la fois (Blender monte à ~7 Go de mémoire) : ≈ 1 minute par
+              section, environ 5 h 30 pour l'île entière ; données et rendus de chaque
+              section sont effacés une fois découpés.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>7. Le découpage en tuiles</summary>
+          <ul>
+            <li>Avec la bibliothèque <code>sharp</code> (Node.js), chaque bloc rendu est
+              recadré puis découpé en 64 tuiles de 256 px au zoom 18, en WebP.</li>
+            <li>Les zooms 17 à 10 sont construits en assemblant 4 tuiles filles et en
+              réduisant le résultat de moitié.</li>
+            <li>Environ 100 000 tuiles (≈ 1,8 Go), hébergées sur Cloudflare R2.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>8. Les libellés et la visionneuse</summary>
+          <ul>
+            <li>Les noms ne sont <strong>pas</strong> peints dans l'image : communes,
+              lieux-dits et rues d'OpenStreetMap forment une couche vectorielle à part,
+              qui reste lisible à toutes les échelles.</li>
+            <li>Affichage avec <strong>MapLibre GL</strong> (source raster XYZ +
+              couches de texte), application compilée avec Vite.</li>
+          </ul>
+        </details>
+
+        <details name="about-step">
+          <summary>Licences</summary>
+          <ul>
+            <li>Relief, orthophotographie, BD TOPO, RPG : © IGN, licence ouverte
+              Etalab 2.0.</li>
+            <li>Occupation du sol : ESA WorldCover 2021, CC BY 4.0.</li>
+            <li>Libellés : © contributeurs OpenStreetMap, licence ODbL.</li>
+          </ul>
+        </details>
+      </div>
+    </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
