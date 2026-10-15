@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carte illustrée</title>
+    <meta name="description" content="Fond de carte illustré rendu dans Blender à partir des données IGN et découpé en tuiles XYZ : la Martinique entière, avec libellés OpenStreetMap." />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+    <form id="panel" aria-label="Réglages de la carte">
+      <label for="region">Région</label>
+      <select id="region"></select>
+      <label hidden><input id="remote" type="checkbox" /> Tuiles hébergées (R2)</label>
+      <fieldset id="seasons">
+        <legend>Saison</legend>
+      </fieldset>
+      <label for="bearing">Rotation : <output id="bearing-value">0°</output></label>
+      <input id="bearing" type="range" min="-180" max="180" step="5" value="0" />
+      <button id="grincat" type="button">Vue à la Grincat (−125°)</button>
+      <label><input id="labels" type="checkbox" checked /> Libellés (communes, lieux, rues)</label>
+      <label><input id="hd" type="checkbox" /> Tuiles HD (@2x)</label>
+      <label><input id="grid" type="checkbox" /> Bords des tuiles chargées</label>
+      <label><input id="grid-ids" type="checkbox" /> Coordonnées des tuiles (z/x/y)</label>
+      <label><input id="ortho" type="checkbox" /> Superposer l'ortho IGN</label>
+      <label for="ortho-opacity">Opacité ortho</label>
+      <input id="ortho-opacity" type="range" min="0" max="1" step="0.05" value="0.5" />
+      <label><input id="osm" type="checkbox" /> Superposer OSM</label>
+      <label for="osm-opacity">Opacité OSM</label>
+      <input id="osm-opacity" type="range" min="0" max="1" step="0.05" value="0.5" />
+      <p id="zoom"></p>
+    </form>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

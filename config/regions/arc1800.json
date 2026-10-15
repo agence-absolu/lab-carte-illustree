@@ -1,0 +1,20 @@
+{
+  "name": "arc1800",
+  "description": "POC : secteur d'Arc 1800 (Les Arcs), ~1 km de côté",
+  "center": [
+    6.79,
+    45.5745
+  ],
+  "sizeMeters": 1000,
+  "minZoom": 13,
+  "maxZoom": 19,
+  "tileSize": 256,
+  "chunkTiles": 8,
+  "chunkMarginPx": 64,
+  "renderScale": 1,
+  "seasons": [
+    "summer",
+    "winter"
+  ],
+  "climate": "alpine"
+}

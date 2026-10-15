@@ -1,0 +1,16 @@
+{
+  "name": "martinique",
+  "description": "Martinique, île entière (z18)",
+  "bounds": [-61.245, 14.38, -60.8, 14.885],
+  "tiled": { "sectionChunks": 2, "keepDepth": -25, "coastChunks": 1 },
+  "minZoom": 10,
+  "maxZoom": 18,
+  "tileSize": 256,
+  "chunkTiles": 8,
+  "chunkMarginPx": 64,
+  "seasons": ["jour"],
+  "climate": "tropical",
+  "lidar": false,
+  "sea": true,
+  "seaDepth": -60
+}
