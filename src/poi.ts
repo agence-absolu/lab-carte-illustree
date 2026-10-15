@@ -4,15 +4,20 @@
 // Photos choisies à la main sur Commons, avec auteur et licence : pour une version publiée,
 // les remplacer par des photos ou vidéos dont on a les droits (office de tourisme…).
 
-import type { Map as MaplibreMap } from 'maplibre-gl';
+import { Popup, type Map as MaplibreMap } from 'maplibre-gl';
+import fredUrl from './assets/fred.png';
 
 interface Poi {
   name: string;
   text: string;
   lngLat: [number, number];
   // Caméra d'arrivée : bearing = direction regardée (° depuis le nord)
-  camera: { zoom: number; pitch: number; bearing: number };
-  photo: { file: string; author: string; license: string };
+  // offset : position du lieu à l'écran, en px depuis le centre (y négatif = vers le haut)
+  camera: { zoom: number; pitch: number; bearing: number; offset?: [number, number] };
+  // Sans photo : la séquence s'arrête sur le travelling, avec une bulle au nom du lieu
+  photo?: { file: string; author: string; license: string };
+  // Médaillon rond (PNG 96 px, cerclé de blanc) à la place du point
+  icon?: string;
 }
 
 const POIS: Poi[] = [
@@ -72,6 +77,15 @@ const POIS: Poi[] = [
     camera: { zoom: 14.8, pitch: 65, bearing: 230 },
     photo: { file: 'Diamond_Rock.jpg', author: 'Apmarles', license: 'CC BY 3.0' },
   },
+  {
+    name: 'Chez Fred !',
+    text: 'Vue sur l\'Anse Mitan et la baie de Fort-de-France.',
+    lngLat: [-61.053087813662195, 14.547598730078395],
+    camera: { zoom: 17, pitch: 60, bearing: 180, offset: [0, -220] },
+    // L'Anse Mitan, en contrebas, vers la baie de Fort-de-France (pas encore de photo prise de chez lui)
+    photo: { file: 'Les_Trois-Îlets,_Martinique_2019-11-04.jpg', author: 'Alexey Komarov', license: 'CC BY-SA 4.0' },
+    icon: fredUrl,
+  },
 ];
 
 const commonsImage = (file: string, width: number) =>
@@ -81,7 +95,7 @@ const commonsPage = (file: string) => `https://commons.wikimedia.org/wiki/File:$
 const FLIGHT_MS = 5000; // vol vers le lieu
 const ORBIT_MS = 9000; // travelling circulaire à l'arrivée
 const ORBIT_DEG = 35;
-const PHOTO_AFTER_MS = 2500; // délai entre l'arrivée et le fondu vers la photo
+const PHOTO_AFTER_MS = 400; // délai entre l'arrivée et le fondu vers la photo (presque aussitôt)
 
 /**
  * Ajoute les points remarquables à la carte (après le chargement du style).
@@ -95,7 +109,7 @@ export function setupPois(map: MaplibreMap, enableTilt: () => void): void {
       features: POIS.map((p, i) => ({
         type: 'Feature',
         id: i,
-        properties: { name: p.name },
+        properties: { name: p.name, ...(p.icon ? { icon: `poi-${i}` } : {}) },
         geometry: { type: 'Point', coordinates: p.lngLat },
       })),
     },
@@ -104,6 +118,7 @@ export function setupPois(map: MaplibreMap, enableTilt: () => void): void {
     id: 'poi-cercle',
     type: 'circle',
     source: 'poi',
+    filter: ['!', ['has', 'icon']],
     paint: {
       'circle-radius': 7,
       'circle-color': '#f2a33a',
@@ -116,6 +131,8 @@ export function setupPois(map: MaplibreMap, enableTilt: () => void): void {
     id: 'poi-nom',
     type: 'symbol',
     source: 'poi',
+    // Lieux à médaillon : la photo suffit, pas de nom
+    filter: ['!', ['has', 'icon']],
     layout: {
       'text-field': ['get', 'name'],
       'text-font': ['Metropolis Bold'],
@@ -127,13 +144,41 @@ export function setupPois(map: MaplibreMap, enableTilt: () => void): void {
     paint: { 'text-color': '#7a3d00', 'text-halo-color': '#ffffff', 'text-halo-width': 2 },
   });
 
-  const canvas = map.getCanvas();
-  map.on('mouseenter', 'poi-cercle', () => (canvas.style.cursor = 'pointer'));
-  map.on('mouseleave', 'poi-cercle', () => (canvas.style.cursor = ''));
-  map.on('click', 'poi-cercle', (e) => {
-    const id = e.features?.[0]?.id;
-    if (typeof id === 'number') visit(POIS[id]);
+  // Médaillons : images chargées puis couche de symboles, sous les noms
+  Promise.all(
+    POIS.map(async (p, i) => {
+      if (!p.icon) return;
+      const img = await map.loadImage(p.icon);
+      map.addImage(`poi-${i}`, img.data, { pixelRatio: 2 });
+    }),
+  ).then(() => {
+    map.addLayer(
+      {
+        id: 'poi-icone',
+        type: 'symbol',
+        source: 'poi',
+        filter: ['has', 'icon'],
+        layout: {
+          'icon-image': ['get', 'icon'],
+          'icon-allow-overlap': true,
+          'icon-pitch-alignment': 'viewport',
+        },
+      },
+      'poi-nom',
+    );
+    listen('poi-icone');
   });
+
+  const canvas = map.getCanvas();
+  listen('poi-cercle');
+  function listen(layer: string) {
+    map.on('mouseenter', layer, () => (canvas.style.cursor = 'pointer'));
+    map.on('mouseleave', layer, () => (canvas.style.cursor = ''));
+    map.on('click', layer, (e) => {
+      const id = e.features?.[0]?.id;
+      if (typeof id === 'number') visit(POIS[id]);
+    });
+  }
 
   // Vue photo : modale plein écran, fondu et lent zoom (effet Ken Burns) en CSS
   const view = document.getElementById('poi-view') as HTMLDialogElement;
@@ -141,24 +186,34 @@ export function setupPois(map: MaplibreMap, enableTilt: () => void): void {
   const title = view.querySelector('h2')!;
   const text = view.querySelector('p.poi-text')!;
   const credit = view.querySelector<HTMLAnchorElement>('a.poi-credit')!;
+  const popup = new Popup({ closeButton: false, offset: 26, className: 'poi-popup' });
   let run = 0; // jeton : un nouveau clic ou une fermeture annule la séquence en cours
 
   function visit(poi: Poi) {
     const token = ++run;
+    popup.remove();
     enableTilt();
-    // Photo préchargée pendant le vol
-    img.src = commonsImage(poi.photo.file, Math.min(2560, Math.round(innerWidth * devicePixelRatio)));
-    img.alt = `Photo : ${poi.name}`;
-    title.textContent = poi.name;
-    text.textContent = poi.text;
-    credit.textContent = `Photo : ${poi.photo.author}, ${poi.photo.license}, via Wikimedia Commons`;
-    credit.href = commonsPage(poi.photo.file);
+    const photo = poi.photo;
+    if (photo) {
+      // Photo préchargée pendant le vol
+      img.src = commonsImage(photo.file, Math.min(2560, Math.round(innerWidth * devicePixelRatio)));
+      img.alt = `Photo : ${poi.name}`;
+      title.textContent = poi.name;
+      text.textContent = poi.text;
+      credit.textContent = `Photo : ${photo.author}, ${photo.license}, via Wikimedia Commons`;
+      credit.href = commonsPage(photo.file);
+    }
 
-    const { zoom, pitch, bearing } = poi.camera;
-    map.flyTo({ center: poi.lngLat, zoom, pitch, bearing: bearing - ORBIT_DEG / 2, duration: FLIGHT_MS, curve: 1.6, essential: true });
+    const { zoom, pitch, bearing, offset = [0, 0] } = poi.camera;
+    map.flyTo({ center: poi.lngLat, offset, zoom, pitch, bearing: bearing - ORBIT_DEG / 2, duration: FLIGHT_MS, curve: 1.6, essential: true });
     map.once('moveend', () => {
       if (token !== run) return;
-      map.easeTo({ bearing: bearing + ORBIT_DEG / 2, duration: ORBIT_MS, easing: (t) => t, essential: true });
+      // Travelling autour du lieu lui-même (qui reste à sa place à l'écran), pas du centre
+      map.easeTo({ bearing: bearing + ORBIT_DEG / 2, around: poi.lngLat, duration: ORBIT_MS, easing: (t) => t, essential: true });
+      if (!photo) {
+        popup.setLngLat(poi.lngLat).setText(poi.text ? `${poi.name} — ${poi.text}` : poi.name).addTo(map);
+        return;
+      }
       setTimeout(() => {
         if (token !== run) return;
         view.showModal();

@@ -382,6 +382,19 @@ node scripts/export-elements.ts --region martinique --section 15_9  # → elemen
   taille = hauteur réelle (expression exponentielle base 2 sur le zoom), pied calé par `icon-offset`
   par arbre ; ombres = disques flous décalés vers le SE ; bâtiments = deux `fill-extrusion` (murs
   crème + dalle de toit de 0,6 m à la couleur moyenne de l'ortho). À partir du zoom carte 14.
+- Sections équipées : `15_9` (Saint-Pierre) et `21_18` (Anse Mitan, chez Fred), listées dans
+  `elements/index.json` (tenu à jour par `export-elements`). `make-tiles` sans `--cut-only` **vide
+  `sol/`** avant d'écrire : mettre de côté les tuiles des autres sections et les remettre après.
+- **Limite MapLibre** : une tuile GeoJSON ne tient pas ~16 000 icônes (erreur
+  `bucket.icon.opacityVertexArray.length … !== layoutVertexArray.length / 4`) ; une tuile de zoom
+  12–14 couvre une section boisée entière (~80 000 arbres) → arbres répartis entre 6 sources.
+- **Niveau de détail** : en vue inclinée, le lointain prend des tuiles de zoom faible ; un `minzoom`
+  de couche (évalué au zoom de la tuile) y supprime les arbres alors que le sol nu s'affiche, et le
+  `minzoom` d'une source raster n'empêche pas son affichage. Couches construites dès le zoom 12,
+  visibilité gérée en JS : zoom carte ≥ 15,5 **et** inclinaison ≥ 20° (à plat, des arbres debout
+  vus de dessus sembleraient couchés : tuiles peintes).
+- Clins d'œil : `EXTRAS` dans `src/elements.ts` (caipirinha géante chez Fred, `blender/caipirinha.py`,
+  contour cartoon par Freestyle ; un jeu de lignes créé par script n'a pas de `linestyle`).
 - Relief 3D (vue inclinée) : tuiles Terrarium d'AWS (~30 m), à remplacer par le RGE ALTI.
 - Limites : les arbres passent devant les bâtiments quelle que soit la profondeur (les symboles ne
   testent pas la profondeur), billboards identiques sous tous les angles, raccord visible en bord de

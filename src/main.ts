@@ -289,12 +289,21 @@ function applyTilt() {
 }
 tilt.addEventListener('change', applyTilt);
 
-// Éléments repositionnés (essai, Saint-Pierre) : sol sans arbres, arbres en sprites, bâtiments extrudés
+// Éléments repositionnés (essai, Saint-Pierre et chez Fred) : sol sans arbres, arbres en sprites, bâtiments extrudés
 const elementsInput = $<HTMLInputElement>('elements');
 elementsInput.closest('label')!.hidden = meta.name !== 'martinique';
 let showElements: ((on: boolean) => void) | null = null;
+// Éléments sous les libellés, ou à défaut sous les points remarquables (pastille de Fred au-dessus)
+const elementsBefore = () => (hasLabels ? labelLayers[0].id : map.getLayer('poi-cercle') ? 'poi-cercle' : undefined);
+// Cochée par défaut : les éléments prennent le relais en vue inclinée, de près
+if (meta.name === 'martinique') {
+  map.once('load', async () => {
+    showElements ??= await setupElements(map, TILES, elementsBefore());
+    showElements(elementsInput.checked);
+  });
+}
 elementsInput.addEventListener('change', async () => {
-  showElements ??= await setupElements(map, TILES, hasLabels ? labelLayers[0].id : undefined);
+  showElements ??= await setupElements(map, TILES, elementsBefore());
   showElements(elementsInput.checked);
   if (!elementsInput.checked) return;
   if (!tilt.checked) {
@@ -302,7 +311,11 @@ elementsInput.addEventListener('change', async () => {
     applyTilt();
     map.stop();
   }
-  map.flyTo({ center: [-61.1775, 14.7425], zoom: 16.2, pitch: 62, bearing: 70, duration: 3500, essential: true });
+  // Déjà au-dessus d'une zone équipée (Saint-Pierre, Anse Mitan) et assez près : on reste ; sinon, Saint-Pierre
+  const { lng, lat } = map.getCenter();
+  const near = map.getZoom() >= 15.5 && ((lng > -61.194 && lng < -61.171 && lat > 14.732 && lat < 14.754) ||
+    (lng > -61.063 && lng < -61.039 && lat > 14.541 && lat < 14.563));
+  if (!near) map.flyTo({ center: [-61.1775, 14.7425], zoom: 16.2, pitch: 62, bearing: 70, duration: 3500, essential: true });
 });
 
 // Superposition de l'ortho IGN pour comparaison

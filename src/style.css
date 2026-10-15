@@ -178,11 +178,14 @@ body {
   color: #fff;
   background: #000;
   opacity: 0;
-  transition: opacity 1.2s ease;
+  /* Disparition rapide au retour à la carte */
+  transition: opacity 0.6s ease;
 }
 
 #poi-view.visible {
   opacity: 1;
+  /* Apparition lente */
+  transition: opacity 2s ease;
 }
 
 #poi-view::backdrop {
@@ -235,4 +238,10 @@ body {
   border: 1px solid rgb(255 255 255 / 0.6);
   border-radius: 8px;
   cursor: pointer;
+}
+
+.poi-popup .maplibregl-popup-content {
+  padding: 6px 10px;
+  font-weight: 600;
+  color: #7a3d00;
 }

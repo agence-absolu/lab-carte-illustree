@@ -5,7 +5,8 @@
 // - Bâtiments : emprise BD TOPO, hauteur, couleur du toit lue sur l'orthophoto.
 //
 // Usage : node scripts/export-elements.ts --region nom --section id
-// Sortie : public/tiles/{nom}/elements/{id}.json ({ trees, buildings } en GeoJSON lon/lat)
+// Sortie : public/tiles/{nom}/elements/{id}.json ({ trees, buildings } en GeoJSON lon/lat),
+// et elements/index.json (sections exportées et leurs emprises)
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
@@ -47,10 +48,27 @@ for (const [name, s] of Object.entries(sprites)) {
   byModel.get(s.model)!.push(name);
 }
 
+// Éclaircie des zones denses (fluidité de la visionneuse) : dans une cellule de DENSE_CELL m comptant
+// au moins DENSE_MIN arbres, un arbre sur deux (tirage reproductible), les autres un peu grossis pour
+// garder une canopée fermée. Les arbres isolés et les lisières clairsemées restent tous.
+const DENSE_CELL = 20;
+const DENSE_MIN = 12;
+const DENSE_GROW = 1.15;
+const cellOf = (x: number, y: number) => `${Math.floor((bx0 + x) / DENSE_CELL)}_${Math.floor((by0 + y) / DENSE_CELL)}`;
+const density = new Map<string, number>();
+for (const t of trees) density.set(cellOf(t.x, t.y), (density.get(cellOf(t.x, t.y)) ?? 0) + 1);
+
+let thinned = 0;
 const treeFeatures = [];
 for (const t of trees) {
   if (!inside(t.x, t.y)) continue;
   const hsh = hash(t.x, t.y);
+  const dense = (density.get(cellOf(t.x, t.y)) ?? 0) >= DENSE_MIN;
+  if (dense && (hsh >>> 20) % 2 === 1) {
+    thinned++;
+    continue;
+  }
+  const grow = dense ? DENSE_GROW : 1;
   let model = MODEL[t.k] ?? 0;
   if (model === 0 && hsh % 100 < 45) model = 1;
   const names = byModel.get(model)!;
@@ -60,7 +78,7 @@ for (const t of trees) {
     type: 'Feature',
     geometry: { type: 'Point', coordinates: toLonLat(t.x, t.y) },
     // i : sprite ; s : côté de l'image en mètres ; f : pied dans l'image (fraction depuis le haut)
-    properties: { i: name, s: +(t.h * s.side).toFixed(2), f: +s.footY.toFixed(3), r: t.r, h: t.h },
+    properties: { i: name, s: +(t.h * grow * s.side).toFixed(2), f: +s.footY.toFixed(3), r: +(t.r * grow).toFixed(2), h: t.h },
   });
 }
 
@@ -120,4 +138,14 @@ await writeFile(
     buildings: { type: 'FeatureCollection', features: buildingFeatures },
   }),
 );
-console.log(`${PATHS.section} : ${treeFeatures.length} arbres, ${buildingFeatures.length} bâtiments → ${out}`);
+// Index des sections exportées, lu par la visionneuse
+const indexFile = join(out, 'index.json');
+let index: { id: string; bounds: number[] }[] = [];
+try {
+  index = JSON.parse(await readFile(indexFile, 'utf8'));
+} catch {
+  // premier export
+}
+index = [...index.filter((e) => e.id !== PATHS.section), { id: PATHS.section, bounds: region.lonLatBounds }];
+await writeFile(indexFile, JSON.stringify(index.sort((a, b) => a.id.localeCompare(b.id)), null, 1));
+console.log(`${PATHS.section} : ${treeFeatures.length} arbres (${thinned} retirés en zone dense), ${buildingFeatures.length} bâtiments → ${out}`);

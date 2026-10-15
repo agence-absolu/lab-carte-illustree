@@ -1,4 +1,4 @@
-// Essai « éléments repositionnés » (section de Saint-Pierre) : au lieu des arbres et des
+// Essai « éléments repositionnés » (sections listées dans elements/index.json) : au lieu des arbres et des
 // bâtiments peints dans les tuiles, la carte les place elle-même sur un sol rendu sans eux.
 // - Arbres : images des modèles Blender vus de biais (sprites), debout face à la caméra,
 //   à leur hauteur réelle, avec une ombre ronde au sol.
@@ -7,9 +7,24 @@
 
 import type { ExpressionSpecification, GeoJSONSourceSpecification, Map as MaplibreMap } from 'maplibre-gl';
 
-const SECTION = '15_9';
-const SPRITE_CSS_PX = 128; // sprites de 256 px affichés en pixelRatio 2
-const MIN_ZOOM = 14; // zoom carte (tuiles z15) : en dessous, tuiles illustrées habituelles
+const SPRITE_CSS_PX = 128; // côté des sprites en px CSS avant mise à l'échelle (icon-size)
+// Les éléments remplacent les tuiles peintes en vue inclinée et de près ; sinon (vue à plat,
+// vue d'ensemble), les tuiles peintes restent : des arbres debout, vus de dessus, sembleraient couchés.
+const MIN_ZOOM = 15.5; // zoom carte
+const MIN_PITCH = 20; // °
+// Les couches sont construites dès les tuiles de zoom 12 : en vue inclinée, le lointain prend des
+// tuiles de zoom faible, qui doivent aussi porter leurs arbres.
+const LAYER_MIN_ZOOM = 12;
+// Une tuile GeoJSON de MapLibre ne tient pas plus de ~16 000 icônes (sommets indexés sur 16 bits),
+// et une tuile de zoom 12 à 14 couvre toute une section boisée (~80 000 arbres) : arbres répartis
+// entre plusieurs sources.
+const TREE_SHARDS = 6;
+// Sprites posés à la main, en plus des arbres (clins d'œil) : hauteur en mètres
+const EXTRAS = [
+  // Chez Fred : une caipirinha géante (blender/caipirinha.py), comme posée chez le voisin : ~15 m à
+  // l'est de sa pastille (à sa gauche dans le point de vue du lieu, tourné vers le sud)
+  { sprite: 'caipirinha', lngLat: [-61.05295, 14.54755], height: 20 },
+];
 const WALL = '#ece3d3'; // façades, comme dans build_scene.py
 const ROOF_SLAB = 0.6; // épaisseur de la dalle de toit (m)
 
@@ -37,34 +52,66 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
   const base = `${tiles}/martinique`;
   let loaded: Promise<void> | null = null;
 
+  const ids: string[] = [];
+
   async function load() {
-    const data: Elements = await fetch(`${base}/elements/${SECTION}.json`).then((r) => r.json());
-    const sprites: Record<string, unknown> = await fetch(`${base}/elements/sprites/sprites.json`).then((r) => r.json());
+    const index: { id: string; bounds: [number, number, number, number] }[] =
+      await fetch(`${base}/elements/index.json`).then((r) => r.json());
+    const sections: Elements[] = await Promise.all(index.map((e) => fetch(`${base}/elements/${e.id}.json`).then((r) => r.json())));
+    const sprites: Record<string, { side: number; footY: number }> = await fetch(`${base}/elements/sprites/sprites.json`).then((r) => r.json());
     await Promise.all(
       Object.keys(sprites).map(async (name) => {
         const img = await map.loadImage(`${base}/elements/sprites/${name}.png`);
-        if (!map.hasImage(name)) map.addImage(name, img.data, { pixelRatio: 256 / SPRITE_CSS_PX });
+        // Toutes les images à SPRITE_CSS_PX de côté, quelle que soit leur définition (256 ou 512 px)
+        if (!map.hasImage(name)) map.addImage(name, img.data, { pixelRatio: img.data.width / SPRITE_CSS_PX });
       }),
     );
-    const lat = (data.bounds[1] + data.bounds[3]) / 2;
+    // Taille des sprites calculée à une seule latitude (l'île entière tient en 0,6° : < 0,3 % d'écart)
+    const lat = (index[0].bounds[1] + index[0].bounds[3]) / 2;
+    const data: Elements = {
+      bounds: index[0].bounds,
+      trees: { type: 'FeatureCollection', features: sections.flatMap((d) => d.trees.features) },
+      buildings: { type: 'FeatureCollection', features: sections.flatMap((d) => d.buildings.features) },
+    };
+    // Clins d'œil : source à part, pour un calque au-dessus des arbres
+    const extras: Collection = { type: 'FeatureCollection', features: [] };
+    for (const x of EXTRAS) {
+      const sp = sprites[x.sprite];
+      if (!sp) continue;
+      extras.features.push({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: x.lngLat },
+        properties: { i: x.sprite, s: x.height * sp.side, f: sp.footY, o: [0, (1 - sp.footY) * SPRITE_CSS_PX] },
+      });
+    }
+    map.addSource('extras', { type: 'geojson', data: extras as GeoJSONSourceSpecification['data'] });
     // f : position du pied dans l'image (fraction depuis le haut) → décalage depuis le bas
     for (const t of data.trees.features) {
       const p = t.properties;
       p.o = [0, (1 - p.f) * SPRITE_CSS_PX];
     }
 
-    // Sol rendu sans arbres ni bâtiments, au-dessus des tuiles habituelles
-    map.addSource('sol', {
-      type: 'raster',
-      tiles: [`${base}/sol/{z}/{x}/{y}.webp`],
-      tileSize: 256,
-      bounds: data.bounds.map((v, i) => v + (i < 2 ? 1e-7 : -1e-7)) as [number, number, number, number],
-      minzoom: 10,
-      maxzoom: 18,
-    });
-    map.addLayer({ id: 'sol', type: 'raster', source: 'sol', minzoom: MIN_ZOOM, paint: { 'raster-resampling': 'linear' } }, 'ortho');
+    // Sol rendu sans arbres ni bâtiments, au-dessus des tuiles habituelles : une source par
+    // section, bornée à son emprise (pas de requêtes pour des tuiles qui n'existent pas)
+    for (const e of index) {
+      const id = `sol-${e.id}`;
+      map.addSource(id, {
+        type: 'raster',
+        tiles: [`${base}/sol/{z}/{x}/{y}.webp`],
+        tileSize: 256,
+        bounds: e.bounds.map((v, i) => v + (i < 2 ? 1e-7 : -1e-7)) as [number, number, number, number],
+        minzoom: 10,
+        maxzoom: 18,
+      });
+      map.addLayer({ id, type: 'raster', source: id, minzoom: LAYER_MIN_ZOOM, paint: { 'raster-resampling': 'linear' } }, 'ortho');
+      ids.push(id);
+    }
 
     map.addSource('arbres', { type: 'geojson', data: data.trees as GeoJSONSourceSpecification['data'] });
+    for (let k = 0; k < TREE_SHARDS; k++) {
+      const features = data.trees.features.filter((_, i) => i % TREE_SHARDS === k);
+      map.addSource(`arbres-${k}`, { type: 'geojson', data: { ...data.trees, features } as GeoJSONSourceSpecification['data'] });
+    }
     map.addSource('batiments', { type: 'geojson', data: data.buildings as GeoJSONSourceSpecification['data'] });
 
     // Ombres : disque flou décalé vers le sud-est (soleil au nord-ouest), à plat sur le sol
@@ -73,7 +120,7 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
         id: 'arbres-ombres',
         type: 'circle',
         source: 'arbres',
-        minzoom: MIN_ZOOM,
+        minzoom: LAYER_MIN_ZOOM,
         paint: {
           'circle-radius': perMeter(lat, ['get', 'r'], 0.95),
           'circle-color': '#0e2a14',
@@ -93,7 +140,7 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
         id: 'batiments-murs',
         type: 'fill-extrusion',
         source: 'batiments',
-        minzoom: MIN_ZOOM,
+        minzoom: LAYER_MIN_ZOOM,
         paint: {
           'fill-extrusion-color': WALL,
           'fill-extrusion-height': ['-', ['get', 'h'], ROOF_SLAB],
@@ -108,7 +155,7 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
         id: 'batiments-toits',
         type: 'fill-extrusion',
         source: 'batiments',
-        minzoom: MIN_ZOOM,
+        minzoom: LAYER_MIN_ZOOM,
         paint: {
           'fill-extrusion-color': ['get', 'c'],
           'fill-extrusion-height': ['get', 'h'],
@@ -119,34 +166,71 @@ export async function setupElements(map: MaplibreMap, tiles: string, beforeId: s
       beforeId,
     );
     // Arbres debout, du fond vers l'avant ; le pied de l'arbre sur son point
+    const treeIds = [];
+    for (let k = 0; k < TREE_SHARDS; k++) {
+      treeIds.push(`arbres-${k}`);
+      map.addLayer(
+        {
+          id: `arbres-${k}`,
+          type: 'symbol',
+          source: `arbres-${k}`,
+          minzoom: LAYER_MIN_ZOOM,
+          layout: {
+            'icon-image': ['get', 'i'],
+            'icon-size': perMeter(lat, ['get', 's'], 1 / SPRITE_CSS_PX),
+            // Pied de l'arbre sur son point : décalage propre à chaque sprite (o, pixels de l'image)
+            'icon-offset': ['get', 'o'],
+            'icon-anchor': 'bottom',
+            'icon-pitch-alignment': 'viewport',
+            'icon-rotation-alignment': 'viewport',
+            'icon-allow-overlap': true,
+            'icon-ignore-placement': true,
+            'symbol-z-order': 'viewport-y',
+          },
+        },
+        beforeId,
+      );
+    }
+    // Au-dessus de tous les arbres (ajouté après eux), sous les libellés et les points remarquables
     map.addLayer(
       {
-        id: 'arbres',
+        id: 'extras',
         type: 'symbol',
-        source: 'arbres',
-        minzoom: MIN_ZOOM,
+        source: 'extras',
+        minzoom: LAYER_MIN_ZOOM,
         layout: {
           'icon-image': ['get', 'i'],
           'icon-size': perMeter(lat, ['get', 's'], 1 / SPRITE_CSS_PX),
-          // Pied de l'arbre sur son point : décalage propre à chaque sprite (o, pixels de l'image)
           'icon-offset': ['get', 'o'],
           'icon-anchor': 'bottom',
           'icon-pitch-alignment': 'viewport',
           'icon-rotation-alignment': 'viewport',
           'icon-allow-overlap': true,
           'icon-ignore-placement': true,
-          'symbol-z-order': 'viewport-y',
         },
       },
       beforeId,
     );
+    ids.push('arbres-ombres', 'batiments-murs', 'batiments-toits', ...treeIds, 'extras');
+    map.on('zoom', update);
+    map.on('pitch', update);
   }
 
-  const ids = ['sol', 'arbres-ombres', 'batiments-murs', 'batiments-toits', 'arbres'];
+  let enabled = false;
+  let shown: boolean | null = null;
+  function update() {
+    const show = enabled && map.getZoom() >= MIN_ZOOM && map.getPitch() >= MIN_PITCH;
+    if (show === shown) return;
+    shown = show;
+    for (const id of ids) map.setLayoutProperty(id, 'visibility', show ? 'visible' : 'none');
+  }
+
   return (on: boolean) => {
+    enabled = on;
     if (on && !loaded) loaded = load();
     loaded?.then(() => {
-      for (const id of ids) map.setLayoutProperty(id, 'visibility', on ? 'visible' : 'none');
+      shown = null;
+      update();
     });
   };
 }
