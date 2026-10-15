@@ -1,6 +1,7 @@
 import * as maplibregl from 'maplibre-gl';
 import type { ExpressionSpecification, FilterSpecification, LayerSpecification, RasterTileSource, StyleSpecification } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { setupPois } from './poi.ts';
 // MapLibre 6 charge son worker via import.meta.url, ce que le pré-bundling de Vite
 // casse : on lui donne l'URL du worker servie par Vite.
 import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
@@ -187,6 +188,16 @@ const style: StyleSpecification = {
       maxzoom: 19,
       attribution: 'Orthophoto © IGN',
     },
+    // Relief pour la vue inclinée (essai) : tuiles Terrarium d'AWS Open Data (SRTM / ETOPO,
+    // ~30 m), libres et sans clé. À remplacer par des tuiles tirées du RGE ALTI si l'essai plaît.
+    dem: {
+      type: 'raster-dem',
+      tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
+      encoding: 'terrarium',
+      tileSize: 256,
+      maxzoom: 14,
+      attribution: 'Relief : Mapzen Terrain Tiles (AWS Open Data)',
+    },
     osm: {
       type: 'raster',
       tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
@@ -228,9 +239,8 @@ const map = new maplibregl.Map({
     [meta.bounds[0] - 0.02, meta.bounds[1] - 0.015],
     [meta.bounds[2] + 0.02, meta.bounds[3] + 0.015],
   ],
-  // Vue fixe, nord en haut et à plat : ni rotation ni inclinaison
+  // Vue à plat, nord en haut ; la case « Vue inclinée » débloque rotation et inclinaison
   dragRotate: false,
-  pitchWithRotate: false,
   touchPitch: false,
   maxPitch: 0,
   attributionControl: { compact: true, customAttribution: 'Données IGN (licence Etalab 2.0)' },
@@ -249,6 +259,34 @@ for (const input of document.querySelectorAll<HTMLInputElement>('input[name="sea
     for (const s of meta.seasons) map.setLayoutProperty(s, 'visibility', s === input.value ? 'visible' : 'none');
   });
 }
+
+// Vue inclinée (essai) : relief 3D sous les tuiles illustrées, inclinaison et rotation permises
+const tilt = $<HTMLInputElement>('tilt');
+const TILT_PITCH = 60;
+function applyTilt() {
+  if (tilt.checked) {
+    map.setTerrain({ source: 'dem', exaggeration: 1.2 });
+    map.setSky({ 'sky-color': '#7fb2e5', 'horizon-color': '#d8e8f5', 'sky-horizon-blend': 0.6, 'fog-color': '#d8e8f5', 'fog-ground-blend': 0.2 });
+    map.setMaxPitch(80);
+    map.dragRotate.enable();
+    map.touchPitch.enable();
+    map.touchZoomRotate.enableRotation();
+    map.keyboard.enableRotation();
+    map.easeTo({ pitch: TILT_PITCH, duration: 1200 });
+  } else {
+    map.dragRotate.disable();
+    map.touchPitch.disable();
+    map.touchZoomRotate.disableRotation();
+    map.keyboard.disableRotation();
+    map.easeTo({ pitch: 0, bearing: 0, duration: 800 });
+    map.once('moveend', () => {
+      if (tilt.checked) return;
+      map.setTerrain(null);
+      map.setMaxPitch(0);
+    });
+  }
+}
+tilt.addEventListener('change', applyTilt);
 
 // Superposition de l'ortho IGN pour comparaison
 const ortho = $<HTMLInputElement>('ortho');
@@ -327,6 +365,16 @@ const drawGrid = () => {
   map.getSource<maplibregl.GeoJSONSource>('grille-ids')?.setData({ type: 'FeatureCollection', features: labels });
 };
 map.on('load', () => {
+  // Points remarquables (essai) : vol incliné puis photo du lieu
+  if (meta.name === 'martinique') {
+    setupPois(map, () => {
+      if (tilt.checked) return;
+      tilt.checked = true;
+      // Relief et inclinaison permis, sans l'animation de la case : le vol prend le relais
+      applyTilt();
+      map.stop();
+    });
+  }
   map.addSource('grille', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
   map.addLayer({
     id: 'grille',

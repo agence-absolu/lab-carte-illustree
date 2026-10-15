@@ -16,6 +16,7 @@
       <fieldset id="seasons">
         <legend>Saison</legend>
       </fieldset>
+      <label><input id="tilt" type="checkbox" /> Vue inclinée (relief 3D, essai)</label>
       <label><input id="labels" type="checkbox" checked /> Libellés (communes, lieux, rues)</label>
       <label><input id="hd" type="checkbox" /> Tuiles HD (@2x)</label>
       <label><input id="grid" type="checkbox" /> Bords des tuiles chargées</label>
@@ -210,6 +211,15 @@
           </ul>
         </details>
       </div>
+    </dialog>
+    <dialog id="poi-view" aria-labelledby="poi-title">
+      <img alt="" />
+      <div class="poi-caption">
+        <h2 id="poi-title"></h2>
+        <p class="poi-text"></p>
+        <a class="poi-credit" target="_blank" rel="noopener"></a>
+      </div>
+      <button type="button">Retour à la carte</button>
     </dialog>
     <script type="module" src="/src/main.ts"></script>
   </body>

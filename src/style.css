@@ -164,3 +164,75 @@ body {
   font-size: 12px;
   overflow-wrap: anywhere;
 }
+
+/* Vue photo d'un point remarquable (essai) : plein écran, fondu et lent zoom */
+#poi-view {
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  color: #fff;
+  background: #000;
+  opacity: 0;
+  transition: opacity 1.2s ease;
+}
+
+#poi-view.visible {
+  opacity: 1;
+}
+
+#poi-view::backdrop {
+  background: transparent;
+}
+
+#poi-view img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.12);
+}
+
+#poi-view.visible img {
+  transform: scale(1);
+  transition: transform 14s ease-out;
+}
+
+#poi-view .poi-caption {
+  position: absolute;
+  inset: auto 0 0;
+  padding: 48px 24px 20px;
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.7));
+}
+
+#poi-view h2 {
+  margin: 0 0 4px;
+  font-size: 28px;
+}
+
+#poi-view p {
+  margin: 0 0 8px;
+  max-width: 60ch;
+}
+
+#poi-view .poi-credit {
+  font-size: 12px;
+  color: rgb(255 255 255 / 0.8);
+}
+
+#poi-view button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: rgb(0 0 0 / 0.45);
+  border: 1px solid rgb(255 255 255 / 0.6);
+  border-radius: 8px;
+  cursor: pointer;
+}
